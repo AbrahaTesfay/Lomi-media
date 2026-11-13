@@ -78,7 +78,22 @@ export function openDatabase(databaseFile = process.env.DATABASE_PATH || './data
       expires_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS password_reset_expiry ON password_reset_tokens(expires_at);
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      token_hash TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES member_users(id) ON DELETE CASCADE,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS email_verification_expiry ON email_verification_tokens(expires_at);
   `);
+  // Backward-compatible migration: existing members remain able to sign in.
+  // Newly registered members must verify their email before authentication.
+  const memberColumns = db.prepare('PRAGMA table_info(member_users)').all().map(column => column.name);
+  if (!memberColumns.includes('email_verified_at')) {
+    db.exec('ALTER TABLE member_users ADD COLUMN email_verified_at INTEGER');
+  }
+  if (!memberColumns.includes('verification_required')) {
+    db.exec('ALTER TABLE member_users ADD COLUMN verification_required INTEGER NOT NULL DEFAULT 0');
+  }
   return db;
 }
 
