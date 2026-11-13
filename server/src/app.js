@@ -5,6 +5,7 @@ import { rateLimit } from 'express-rate-limit';
 import { randomBytes } from 'node:crypto';
 import { contactSchema, adRequestSchema, loginSchema, articleSchema, campaignSchema, portfolioSchema } from './schema.js';
 import { createSession, findSession, requireAdmin, endSession, verifyPassword } from './auth.js';
+import { createAccountRouter } from './account.js';
 
 function slugify(title) { return title.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,68) || 'story'; }
 function idFrom(request) { const id = Number(request.params.id); return Number.isSafeInteger(id) && id > 0 ? id : 0; }
@@ -29,6 +30,7 @@ export function createApp(db) {
   const publicLimiter = rateLimit({windowMs:15*60*1000,limit:5,standardHeaders:'draft-8',legacyHeaders:false,message:{message:'Too many requests. Try again later.'}});
   const loginLimiter = rateLimit({windowMs:15*60*1000,limit:8,standardHeaders:'draft-8',legacyHeaders:false,message:{message:'Too many login attempts. Try again later.'}});
   const adminRead = requireAdmin(db); const adminWrite = requireAdmin(db,{mutation:true});
+  app.use('/api/account', createAccountRouter(db));
 
   app.get('/api/health', (_req,res) => res.json({ok:true,service:'lomi-api'}));
   app.post('/api/contact',publicLimiter,(req,res)=>{

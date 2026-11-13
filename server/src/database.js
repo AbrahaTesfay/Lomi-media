@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes, scryptSync } from 'node:crypto';
+import { loginSchema } from './schema.js';
 
 export function openDatabase(databaseFile = process.env.DATABASE_PATH || './data/lomi-contacts.sqlite') {
   const fullPath = path.resolve(databaseFile);
@@ -54,21 +55,49 @@ export function openDatabase(databaseFile = process.env.DATABASE_PATH || './data
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  // Separate regular visitors from administrator permissions.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS member_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS member_sessions (
+      token_hash TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES member_users(id) ON DELETE CASCADE,
+      csrf_token TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      token_hash TEXT PRIMARY KEY,
+      account_type TEXT NOT NULL CHECK(account_type IN ('admin','user')),
+      user_id INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS password_reset_expiry ON password_reset_tokens(expires_at);
+  `);
   return db;
 }
 
 export function provisionAdmin(db) {
-  const email = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
-  const password = process.env.ADMIN_PASSWORD || '';
   // Only bootstrap on the very first run; credentials can be removed afterward.
   const count = db.prepare('SELECT COUNT(*) AS count FROM admin_users').get().count;
   if (count > 0) return;
-  if (!email && !password) return;
-  if (!email || password.length < 12 || !email.includes('@')) {
-    throw new Error('ADMIN_EMAIL and ADMIN_PASSWORD (at least 12 characters) must both be configured.');
+  const rawEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD || '';
+  if (!rawEmail && !password) {
+    console.warn('No administrator account exists. Set ADMIN_EMAIL and ADMIN_PASSWORD before signing in.');
+    return;
+  }
+  const email = loginSchema.shape.email.safeParse(rawEmail);
+  if (!email.success || password.length < 12 || password.length > 500) {
+    throw new Error('Set a valid ADMIN_EMAIL and an ADMIN_PASSWORD between 12 and 500 characters.');
   }
   const salt = randomBytes(16).toString('hex');
   const derived = scryptSync(password, Buffer.from(salt, 'hex'), 64).toString('hex');
-  db.prepare('INSERT INTO admin_users(email,password_hash) VALUES (?,?)').run(email, `${salt}:${derived}`);
-  console.log('Initial administrator account created. Remove ADMIN_PASSWORD from .env after setup.');
+  db.prepare('INSERT INTO admin_users(email,password_hash) VALUES (?,?)').run(email.data, `${salt}:${derived}`);
+  console.log('Initial administrator account created. Remove ADMIN_EMAIL and ADMIN_PASSWORD from .env after setup.');
 }
