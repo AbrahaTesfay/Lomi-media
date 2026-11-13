@@ -5,6 +5,7 @@ import { rateLimit } from 'express-rate-limit';
 import { randomBytes } from 'node:crypto';
 import { contactSchema, adRequestSchema, loginSchema, articleSchema, campaignSchema, portfolioSchema } from './schema.js';
 import { createSession, findSession, requireAdmin, endSession, verifyPassword } from './auth.js';
+import { createAccountRouter } from './account.js';
 
 function slugify(title) { return title.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,68) || 'story'; }
 function idFrom(request) { const id = Number(request.params.id); return Number.isSafeInteger(id) && id > 0 ? id : 0; }
@@ -29,6 +30,7 @@ export function createApp(db) {
   const publicLimiter = rateLimit({windowMs:15*60*1000,limit:5,standardHeaders:'draft-8',legacyHeaders:false,message:{message:'Too many requests. Try again later.'}});
   const loginLimiter = rateLimit({windowMs:15*60*1000,limit:8,standardHeaders:'draft-8',legacyHeaders:false,message:{message:'Too many login attempts. Try again later.'}});
   const adminRead = requireAdmin(db); const adminWrite = requireAdmin(db,{mutation:true});
+  app.use('/api/account', createAccountRouter(db));
 
   app.get('/api/health', (_req,res) => res.json({ok:true,service:'lomi-api'}));
   app.post('/api/contact',publicLimiter,(req,res)=>{
@@ -47,8 +49,17 @@ export function createApp(db) {
   });
   app.get('/api/articles',(req,res)=>{
     const category = typeof req.query.category==='string' ? req.query.category : '';
-    const articles = category && category !== 'All' ? db.prepare(`SELECT id,slug,title,excerpt,category,language,created_at FROM articles WHERE status='published' AND category=? ORDER BY created_at DESC,id DESC LIMIT 60`).all(category) : db.prepare(`SELECT id,slug,title,excerpt,category,language,created_at FROM articles WHERE status='published' ORDER BY created_at DESC,id DESC LIMIT 60`).all();
-    res.json({items:articles});
+    const query = typeof req.query.q==='string' ? req.query.q.trim().slice(0,80) : '';
+    const where=["status='published'"]; const params=[];
+    if (category && category !== 'All') {where.push('category=?');params.push(category);}
+    if (query) {
+      // instr treats percent signs and underscores as plain text, not LIKE wildcards.
+      where.push('(instr(lower(title),lower(?))>0 OR instr(lower(excerpt),lower(?))>0)');
+      params.push(query,query);
+    }
+    const sql=`SELECT id,slug,title,excerpt,category,language,created_at FROM articles
+      WHERE ${where.join(' AND ')} ORDER BY created_at DESC,id DESC LIMIT 60`;
+    res.json({items:db.prepare(sql).all(...params)});
   });
   app.get('/api/articles/:slug',(req,res)=>{
     const item=db.prepare(`SELECT id,slug,title,excerpt,body,category,language,created_at FROM articles WHERE slug=? AND status='published'`).get(req.params.slug);
@@ -75,7 +86,15 @@ export function createApp(db) {
   app.post('/api/admin/logout',adminWrite,(req,res)=>{endSession(db,req,res);res.json({ok:true});});
   app.get('/api/admin/overview',adminRead,(_req,res)=>{
     const count = (table) => db.prepare(`SELECT COUNT(*) AS total FROM ${table}`).get().total;
-    res.json({inquiries:count('inquiries'),ad_requests:count('ad_requests'),articles:count('articles'),campaigns:count('campaigns'),portfolio:count('portfolio_items')});
+    const filteredCount=(table,field,value) => db.prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE ${field}=?`).get(value).total;
+    res.json({
+      inquiries:count('inquiries'),ad_requests:count('ad_requests'),
+      articles:count('articles'),published_articles:filteredCount('articles','status','published'),
+      draft_articles:filteredCount('articles','status','draft'),
+      campaigns:count('campaigns'),active_campaigns:filteredCount('campaigns','status','active'),
+      portfolio_projects:count('portfolio_items'),published_projects:filteredCount('portfolio_items','status','published'),
+      registered_users:count('member_users'),
+    });
   });
   app.get('/api/admin/inquiries',adminRead,(_req,res)=>res.json({items:db.prepare('SELECT * FROM inquiries ORDER BY id DESC LIMIT 100').all()}));
   app.get('/api/admin/ad-requests',adminRead,(_req,res)=>res.json({items:db.prepare('SELECT * FROM ad_requests ORDER BY id DESC LIMIT 100').all()}));
