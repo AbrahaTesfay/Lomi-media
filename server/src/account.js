@@ -63,10 +63,6 @@ function validCsrf(actual, supplied) {
   const left=Buffer.from(actual || ''); const right=Buffer.from(supplied || '');
   return left.length>0 && left.length===right.length && timingSafeEqual(left,right);
 }
-const loginLimiter=rateLimit({windowMs:15*60*1000,limit:8,standardHeaders:'draft-8',legacyHeaders:false});
-const signupLimiter=rateLimit({windowMs:60*60*1000,limit:5,standardHeaders:'draft-8',legacyHeaders:false});
-const forgotLimiter=rateLimit({windowMs:60*60*1000,limit:5,standardHeaders:'draft-8',legacyHeaders:false});
-const resetLimiter=rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:'draft-8',legacyHeaders:false});
 
 function smtpConfigured() {
   return ['SMTP_HOST','SMTP_USER','SMTP_PASS','SMTP_FROM'].every(key => Boolean(process.env[key]));
@@ -112,6 +108,12 @@ async function issueVerification(db, userId, address, sendVerificationEmail) {
 
 export function createAccountRouter(db, { sendResetEmail, sendVerificationEmail } = {}) {
   const router=Router();
+  // Each app instance owns its own limiter state, including isolated test apps.
+  const limited={message:'Too many requests. Please try again later.'};
+  const loginLimiter=rateLimit({windowMs:15*60*1000,limit:8,standardHeaders:'draft-8',legacyHeaders:false,message:limited});
+  const signupLimiter=rateLimit({windowMs:60*60*1000,limit:5,standardHeaders:'draft-8',legacyHeaders:false,message:limited});
+  const forgotLimiter=rateLimit({windowMs:60*60*1000,limit:5,standardHeaders:'draft-8',legacyHeaders:false,message:limited});
+  const resetLimiter=rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:'draft-8',legacyHeaders:false,message:limited});
   router.get('/me', (req,res) => {
     const admin=findSession(db,req);
     if (admin) return res.json({email:admin.email,csrf:admin.csrf_token,role:'admin'});
