@@ -1,0 +1,12 @@
+import { Route, Routes } from 'react-router-dom';
+import { Footer, Header } from './components/Layout';
+import Home from './pages/Home';
+import Services from './pages/Services';
+import Work from './pages/Work';
+import About from './pages/About';
+import Contact from './pages/Contact';
+import Privacy from './pages/Privacy';
+
+export default function App() {
+  return <><a className="skip-link" href="#main-content">Skip to main content</a><Header/><main id="main-content"><Routes><Route path="/" element={<Home/>}/><Route path="/services" element={<Services/>}/><Route path="/work" element={<Work/>}/><Route path="/about" element={<About/>}/><Route path="/contact" element={<Contact/>}/><Route path="/privacy" element={<Privacy/>}/><Route path="*" element={<section className="container not-found"><h1>Page not found.</h1><p>Looks like this link has wandered off.</p><a href="/">Back to home →</a></section>}/></Routes></main><Footer/></>;
+}

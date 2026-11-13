@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+# Add a sitemap after your real domain is configured and routes are indexed.
