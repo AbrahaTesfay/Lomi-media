@@ -49,8 +49,17 @@ export function createApp(db) {
   });
   app.get('/api/articles',(req,res)=>{
     const category = typeof req.query.category==='string' ? req.query.category : '';
-    const articles = category && category !== 'All' ? db.prepare(`SELECT id,slug,title,excerpt,category,language,created_at FROM articles WHERE status='published' AND category=? ORDER BY created_at DESC,id DESC LIMIT 60`).all(category) : db.prepare(`SELECT id,slug,title,excerpt,category,language,created_at FROM articles WHERE status='published' ORDER BY created_at DESC,id DESC LIMIT 60`).all();
-    res.json({items:articles});
+    const query = typeof req.query.q==='string' ? req.query.q.trim().slice(0,80) : '';
+    const where=["status='published'"]; const params=[];
+    if (category && category !== 'All') {where.push('category=?');params.push(category);}
+    if (query) {
+      // instr treats percent signs and underscores as plain text, not LIKE wildcards.
+      where.push('(instr(lower(title),lower(?))>0 OR instr(lower(excerpt),lower(?))>0)');
+      params.push(query,query);
+    }
+    const sql=`SELECT id,slug,title,excerpt,category,language,created_at FROM articles
+      WHERE ${where.join(' AND ')} ORDER BY created_at DESC,id DESC LIMIT 60`;
+    res.json({items:db.prepare(sql).all(...params)});
   });
   app.get('/api/articles/:slug',(req,res)=>{
     const item=db.prepare(`SELECT id,slug,title,excerpt,body,category,language,created_at FROM articles WHERE slug=? AND status='published'`).get(req.params.slug);
