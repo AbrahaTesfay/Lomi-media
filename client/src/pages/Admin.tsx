@@ -1,5 +1,5 @@
 import { useEffect,useState, type FormEvent } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { FileText, LayoutDashboard, Megaphone, BriefcaseBusiness, Inbox, LogOut } from 'lucide-react';
 import { getJson, sendJson } from '../lib/api';
 
