@@ -10,14 +10,16 @@ const routerMessages = {
 };
 const SESSION_MS = 4 * 60 * 60 * 1000;
 const RESET_MS = 15 * 60 * 1000;
+const VERIFY_MS = 24 * 60 * 60 * 1000;
 const production = process.env.NODE_ENV === 'production';
 const memberCookie = production ? '__Host-lomi_member' : 'lomi_member';
 const email = z.string().trim().email().max(200);
 const newPassword = z.string().min(12).max(128);
-const signupSchema = z.object({ name: z.string().trim().min(2).max(100), email, password: newPassword }).strict();
+const signupSchema = z.object({ name: z.string().trim().min(2).max(100), email, password: newPassword, consent:z.literal(true) }).strict();
 const loginSchema = z.object({ email, password: z.string().min(1).max(500) }).strict();
 const forgotSchema = z.object({ email }).strict();
 const resetSchema = z.object({ token: z.string().regex(/^[a-f0-9]{64}$/), password: newPassword }).strict();
+const verifySchema = z.object({ token: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
 
 function digest(value) { return createHash('sha256').update(value).digest('hex'); }
 function passwordHash(value) {
@@ -66,7 +68,49 @@ const signupLimiter=rateLimit({windowMs:60*60*1000,limit:5,standardHeaders:'draf
 const forgotLimiter=rateLimit({windowMs:60*60*1000,limit:5,standardHeaders:'draft-8',legacyHeaders:false});
 const resetLimiter=rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:'draft-8',legacyHeaders:false});
 
-export function createAccountRouter(db, { sendResetEmail } = {}) {
+function smtpConfigured() {
+  return ['SMTP_HOST','SMTP_USER','SMTP_PASS','SMTP_FROM'].every(key => Boolean(process.env[key]));
+}
+function verificationLink(token) {
+  const base = new URL(process.env.APP_BASE_URL || 'http://127.0.0.1:5173');
+  if (production && base.protocol !== 'https:') throw new Error('Verified HTTPS site URL required.');
+  const url = new URL('/account?mode=verify',base);
+  url.searchParams.set('token',token);
+  return url.toString();
+}
+async function sendVerification(to,link,sendVerificationEmail) {
+  if (sendVerificationEmail) {
+    await sendVerificationEmail({to,link});
+    return;
+  }
+  if (!smtpConfigured()) throw new Error('Email provider not configured.');
+  const { default:nodemailer } = await import('nodemailer');
+  const port = Number(process.env.SMTP_PORT || 587);
+  const transporter = nodemailer.createTransport({
+    host:process.env.SMTP_HOST,port,secure:port===465,
+    auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS},
+  });
+  await transporter.sendMail({
+    from:process.env.SMTP_FROM,to,subject:'Verify your Lomi Media email',
+    text:`Confirm your Lomi Media account within 24 hours:\n\n${link}\n\nIf you did not register, ignore this email.`,
+  });
+}
+async function issueVerification(db, userId, address, sendVerificationEmail) {
+  const token = randomBytes(32).toString('hex');
+  const link = verificationLink(token);
+  db.prepare('DELETE FROM email_verification_tokens WHERE expires_at<?').run(Date.now());
+  db.prepare('DELETE FROM email_verification_tokens WHERE user_id=?').run(userId);
+  db.prepare('INSERT INTO email_verification_tokens(token_hash,user_id,expires_at) VALUES (?,?,?)')
+    .run(digest(token),userId,Date.now()+VERIFY_MS);
+  try {
+    await sendVerification(address,link,sendVerificationEmail);
+  } catch (error) {
+    db.prepare('DELETE FROM email_verification_tokens WHERE token_hash=?').run(digest(token));
+    throw error;
+  }
+}
+
+export function createAccountRouter(db, { sendResetEmail, sendVerificationEmail } = {}) {
   const router=Router();
   router.get('/me', (req,res) => {
     const admin=findSession(db,req);
@@ -75,21 +119,64 @@ export function createAccountRouter(db, { sendResetEmail } = {}) {
     if (member) return res.json({email:member.email,name:member.name,csrf:member.csrf_token,role:'user'});
     return res.status(401).json({message:'Please sign in.'});
   });
-  router.post('/signup', signupLimiter, (req,res) => {
+  router.post('/signup', signupLimiter, async (req,res) => {
     const parsed=signupSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({message:'Enter a valid name, email, and a password of at least 12 characters.'});
+    if (!parsed.success) return res.status(400).json({message:'Enter a valid name, email, password of at least 12 characters, and accept the privacy notice.'});
+    if (!sendVerificationEmail && !smtpConfigured()) {
+      return res.status(503).json({message:'Account registration is not available until email verification is configured.'});
+    }
     const data=parsed.data;
     const address=data.email.toLowerCase();
     const existing=db.prepare('SELECT id FROM admin_users WHERE email=?').get(address) ||
                    db.prepare('SELECT id FROM member_users WHERE email=?').get(address);
     if (existing) return res.status(409).json({message:'This email cannot be registered. Try signing in or resetting your password.'});
-    const hash=passwordHash(data.password);
-    const result=db.prepare('INSERT INTO member_users(name,email,password_hash) VALUES (?,?,?)')
-      .run(data.name,address,hash);
-    // Any previous administrator session is explicitly ended when creating a member account.
-    endSession(db,req,res);
-    const user={id:Number(result.lastInsertRowid),email:address,name:data.name};
-    return res.status(201).json(createMemberSession(db,user,res));
+    let userId;
+    try {
+      const result=db.prepare('INSERT INTO member_users(name,email,password_hash,verification_required) VALUES (?,?,?,1)')
+        .run(data.name,address,passwordHash(data.password));
+      userId=Number(result.lastInsertRowid);
+    } catch (error) {
+      if (error.code?.startsWith('SQLITE_CONSTRAINT')) return res.status(409).json({message:'This email cannot be registered.'});
+      throw error;
+    }
+    try {
+      await issueVerification(db,userId,address,sendVerificationEmail);
+    } catch (error) {
+      // Do not leave inaccessible accounts behind after email delivery fails.
+      db.prepare('DELETE FROM member_users WHERE id=?').run(userId);
+      console.error('Account verification delivery failed.');
+      return res.status(503).json({message:'Unable to send a verification email. Please try again later.'});
+    }
+    return res.status(201).json({message:'Check your email to verify your account before signing in.'});
+  });
+  router.post('/email/resend', forgotLimiter, async (req,res) => {
+    const parsed=forgotSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({message:'Provide a valid email address.'});
+    const user=db.prepare('SELECT id,email,verification_required FROM member_users WHERE email=?').get(parsed.data.email.toLowerCase());
+    if (user?.verification_required) {
+      try { await issueVerification(db,user.id,user.email,sendVerificationEmail); }
+      catch (error) {
+        console.error('Verification resend delivery failed.');
+        return res.status(503).json({message:'Email delivery is currently unavailable.'});
+      }
+    }
+    return res.json({message:'If this account is awaiting verification, a new verification link has been sent.'});
+  });
+  router.post('/email/verify', resetLimiter, (req,res) => {
+    const parsed=verifySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({message:'Invalid verification link.'});
+    const tokenHash=digest(parsed.data.token);
+    const record=db.prepare('SELECT user_id FROM email_verification_tokens WHERE token_hash=? AND expires_at>?')
+      .get(tokenHash,Date.now());
+    if (!record) return res.status(400).json({message:'This verification link is invalid or expired.'});
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.prepare('UPDATE member_users SET verification_required=0,email_verified_at=? WHERE id=?')
+        .run(Date.now(),record.user_id);
+      db.prepare('DELETE FROM email_verification_tokens WHERE user_id=?').run(record.user_id);
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK');throw error; }
+    return res.json({message:'Your email is verified. You can now sign in.'});
   });
   router.post('/login', loginLimiter, (req,res) => {
     const parsed=loginSchema.safeParse(req.body);
@@ -102,8 +189,9 @@ export function createAccountRouter(db, { sendResetEmail } = {}) {
       endMemberSession(db,req,res);
       return res.json({role:'admin',email:admin.email,csrf});
     }
-    const user=db.prepare('SELECT id,name,email,password_hash FROM member_users WHERE email=?').get(address);
+    const user=db.prepare('SELECT id,name,email,password_hash,verification_required FROM member_users WHERE email=?').get(address);
     if (!user || !verifyPassword(parsed.data.password,user.password_hash)) return res.status(401).json({message:routerMessages.invalidLogin});
+    if (user.verification_required) return res.status(403).json({message:'Verify your email before signing in.'});
     endSession(db,req,res);
     return res.json(createMemberSession(db,user,res));
   });
