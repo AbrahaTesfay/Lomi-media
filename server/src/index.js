@@ -1,7 +1,8 @@
 import { createApp } from './app.js';
-import { openDatabase } from './database.js';
+import { openDatabase, provisionAdmin } from './database.js';
 
 const db = openDatabase();
+provisionAdmin(db);
 const app = createApp(db);
 const port = Number(process.env.PORT || 4000);
 const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1';

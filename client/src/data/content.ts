@@ -5,6 +5,8 @@ export const services = [
   { number: '04', icon: 'monitor', title: 'Digital & Web Experiences', short: 'Digital spaces that feel as good as they work.', detail: 'Professional websites, user experience, content-led design, accessible interfaces and digital launches.', tags: ['Websites', 'UX & UI', 'Digital products'] },
   { number: '05', icon: 'globe', title: 'Social & Digital Campaigns', short: 'The right message in the right moment.', detail: 'Editorial calendars, multi-platform storytelling, campaign design, social creative and reporting.', tags: ['Social strategy', 'Campaigns', 'Content'] },
   { number: '06', icon: 'radio', title: 'Events & Live Media', short: 'Experiences people want to talk about.', detail: 'Event creative direction, live coverage, digital broadcast concepts and branded experiences.', tags: ['Live events', 'Broadcast', 'Experiences'] },
+  { number: '07', icon: 'newspaper', title: 'International News & Editorial', short: 'Independent stories with a global perspective.', detail: 'Original reporting, company newsrooms, editorial planning, interviews and multilingual news formats.', tags: ['Editorial strategy', 'Newsroom', 'Publishing'] },
+  { number: '08', icon: 'badge', title: 'Advertising & Media Buying', short: 'A clear platform for brands to connect.', detail: 'Sponsored placements, advertiser campaigns, media planning and clearly identified paid content.', tags: ['Sponsored placements', 'Campaign planning', 'Media buying'] },
 ] as const;
 
 export const projects = [

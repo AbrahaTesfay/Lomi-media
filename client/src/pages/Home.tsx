@@ -3,13 +3,16 @@ import { ArrowRight, ArrowUpRight, Clapperboard, Megaphone, MonitorSmartphone, P
 import { CTA } from '../components/Layout';
 import { WorkCard } from '../components/WorkCard';
 import { processes, projects, services } from '../data/content';
+import SponsoredSlot from '../components/SponsoredSlot';
+import { useLang } from '../lib/i18n';
 
 const serviceIcons = [<Clapperboard size={29}/>, <Sparkles size={29}/>, <Megaphone size={29}/>, <MonitorSmartphone size={29}/>];
 
 export default function Home() {
+  const {lang,t}=useLang();
   return <>
     <section className="hero"><div className="container hero-grid">
-      <div className="hero-content"><span className="eyebrow light-eyebrow"><span className="eyebrow-line"/>CREATIVE COMMUNICATIONS STUDIO</span><h1>Ideas that<br/><span className="highlight-word">move</span> people<span className="dot">.</span></h1><p>We bring stories, brands and bold ideas to life through media, strategy and meaningful communication.</p><div className="hero-actions"><Link className="btn btn-peach" to="/services">What we do <ArrowUpRight size={20}/></Link><Link to="/work" className="text-link light-link">Explore our thinking <ArrowRight size={18}/></Link></div><div className="hero-meta"><span><span className="status-pulse"/>OPEN TO COLLABORATION</span><span>AFRICA-ROOTED / GLOBALLY MINDED</span></div></div>
+      <div className="hero-content"><span className="eyebrow light-eyebrow"><span className="eyebrow-line"/>CREATIVE COMMUNICATIONS STUDIO</span>{lang!=='en'&&<p className="translated-hero">{t('heroHeading')}<small>{t('heroText')}</small></p>}<h1>Ideas that<br/><span className="highlight-word">move</span> people<span className="dot">.</span></h1><p>We bring stories, brands and bold ideas to life through media, strategy and meaningful communication.</p><div className="hero-actions"><Link className="btn btn-peach" to="/services">What we do <ArrowUpRight size={20}/></Link><Link to="/work" className="text-link light-link">Explore our thinking <ArrowRight size={18}/></Link></div><div className="hero-meta"><span><span className="status-pulse"/>OPEN TO COLLABORATION</span><span>AFRICA-ROOTED / GLOBALLY MINDED</span></div></div>
       <div className="hero-visual" aria-label="Abstract editorial design representing film, storytelling and communication" role="img">
         <div className="hero-orbit orbit-one"/><div className="hero-orbit orbit-two"/>
         <div className="hero-poster"><div className="poster-top"><span>LOMI<br/>CREATIVE STUDIO</span><span>EST. / THE FUTURE</span></div><div className="poster-circle"><div className="poster-face"><div className="face-eye left"/><div className="face-eye right"/><div className="face-nose"/></div></div><div className="poster-type">MAKE<br/><i>WAVES.</i></div><div className="poster-bottom"><span>STRATEGY · STORY · CULTURE</span><span>↗</span></div></div>
@@ -29,6 +32,7 @@ export default function Home() {
     <section className="process-section section-space"><div className="container"><div className="section-head"><div><span className="eyebrow light-eyebrow"><span className="eyebrow-line"/>HOW WE THINK</span><h2>Simple process.<br/><em>Extraordinary possibilities.</em></h2></div><p>Every great collaboration begins with curiosity, focus and a shared ambition.</p></div><div className="process-grid">{processes.map(item => <div className="process-item" key={item.number}><span className="process-number">{item.number}</span><h3>{item.title}</h3><p>{item.copy}</p></div>)}</div></div></section>
 
     <section className="statement-section"><div className="container statement-grid"><span className="eyebrow"><span className="eyebrow-line"/>OUR PERSPECTIVE</span><h2>Rooted in our perspective.<br/><em>Open to the world.</em></h2><p>We believe remarkable ideas can come from anywhere — and connect with people everywhere.</p></div></section>
+    <div className="container"><SponsoredSlot placement="homepage"/></div>
     <CTA />
   </>;
 }

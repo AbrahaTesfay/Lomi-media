@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, ArrowUpRight, Menu, X, Instagram, Linkedin, Youtube } from 'lucide-react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
+import { useLang, type Key } from '../lib/i18n';
 
-const navigation = [
-  { to: '/', label: 'Home' }, { to: '/services', label: 'Services' },
-  { to: '/work', label: 'Our work' }, { to: '/about', label: 'About' },
+const navigation: {to:string;key:Key}[] = [
+  { to: '/', key: 'home' }, { to: '/services', key: 'services' },
+  { to: '/work', key: 'work' }, { to: '/news', key: 'news' },
+  { to: '/advertise', key: 'advertise' }, { to: '/about', key: 'about' },
 ];
 
 export function Logo({ light = false }: { light?: boolean }) {
@@ -16,6 +18,7 @@ export function Logo({ light = false }: { light?: boolean }) {
 
 export function Header() {
   const [open, setOpen] = useState(false);
+  const {lang,setLang,t} = useLang();
   const location = useLocation();
   useEffect(() => { setOpen(false); window.scrollTo({top: 0, behavior: 'instant'}); }, [location.pathname]);
   useEffect(() => {
@@ -28,10 +31,10 @@ export function Header() {
     <div className="header-inner container">
       <Logo />
       <nav className={`main-nav ${open ? 'nav-open' : ''}`} id="primary-navigation" aria-label="Primary navigation">
-        {navigation.map(link => <NavLink key={link.to} to={link.to} end={link.to === '/'}>{link.label}</NavLink>)}
-        <Link to="/contact" className="nav-contact mobile-cta">Let's talk <ArrowUpRight size={17}/></Link>
+        {navigation.map(link => <NavLink key={link.to} to={link.to} end={link.to === '/'}>{t(link.key)}</NavLink>)}
+        <Link to="/contact" className="nav-contact mobile-cta">{t('hello')} <ArrowUpRight size={17}/></Link>
       </nav>
-      <Link className="nav-contact desktop-cta" to="/contact">Let's talk <ArrowUpRight size={17}/></Link>
+      <label className="lang-control"><span className="sr-only">{t('language')}</span><select aria-label={t('language')} value={lang} onChange={e=>setLang(e.target.value as typeof lang)}><option value="en">EN</option><option value="am">አማ</option><option value="ti">ትግ</option></select></label><Link className="nav-contact desktop-cta" to="/contact">{t('hello')} <ArrowUpRight size={17}/></Link>
       <button className="menu-button" type="button" aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open} aria-controls="primary-navigation" onClick={() => setOpen(!open)}>{open ? <X size={24}/> : <Menu size={24}/>}</button>
     </div>
   </header>;
@@ -42,10 +45,10 @@ export function Footer() {
     <div className="container">
       <div className="footer-main">
         <div className="footer-brand"><Logo light/><p>Made for meaningful stories, ambitious brands and ideas worth sharing.</p><span className="small-label">AFRICA-ROOTED. GLOBALLY MINDED.</span></div>
-        <div className="footer-col"><span className="footer-heading">EXPLORE</span><Link to="/services">What we do</Link><Link to="/work">Selected work</Link><Link to="/about">Our studio</Link><Link to="/contact">Start a project</Link></div>
+        <div className="footer-col"><span className="footer-heading">EXPLORE</span><Link to="/services">What we do</Link><Link to="/work">Selected work</Link><Link to="/about">Our studio</Link><Link to="/news">Newsroom</Link><Link to="/advertise">Advertise</Link><Link to="/contact">Start a project</Link></div>
         <div className="footer-col"><span className="footer-heading">CONNECT</span><Link to="/contact">Send an inquiry <ArrowUpRight size={14}/></Link><span className="footer-muted">Social pages coming soon</span><div className="social-row"><span aria-label="Instagram coming soon" title="Instagram coming soon"><Instagram size={18}/></span><span aria-label="LinkedIn coming soon" title="LinkedIn coming soon"><Linkedin size={18}/></span><span aria-label="YouTube coming soon" title="YouTube coming soon"><Youtube size={18}/></span></div></div>
       </div>
-      <div className="footer-bottom"><span>© {new Date().getFullYear()} Lomi Media & Communication. All rights reserved.</span><Link to="/privacy">Privacy notice (draft)</Link><span>Designed to communicate.</span></div>
+      <div className="footer-bottom"><span>© {new Date().getFullYear()} Lomi Media & Communication. All rights reserved.</span><Link to="/privacy">Privacy notice (draft)</Link><Link to="/admin">Staff login</Link><span>Designed to communicate.</span></div>
     </div>
   </footer>;
 }
