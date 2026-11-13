@@ -6,6 +6,7 @@ import os from 'node:os';
 import express from 'express';
 import { openDatabase, provisionAdmin } from '../src/database.js';
 import { createAccountRouter } from '../src/account.js';
+import { createApp } from '../src/app.js';
 
 const exampleAdmin='admin-for-test@example.org';
 const adminPassword='administrator-example-passphrase-2026';
@@ -64,6 +65,17 @@ test('signup requires consent and verified email; only existing admins receive a
   assert.equal(registeredLogin.status,200);assert.equal(registeredLogin.body.role,'user');
   const cookie=registeredLogin.cookie.match(/lomi_member=[a-f0-9]{64}/)?.[0];assert.ok(cookie);
   const me=await call(url,'/api/account/me',undefined,cookie);assert.equal(me.body.role,'user');
+  // Real protected admin API rejects an authenticated regular-member cookie.
+  const adminAppServer=createApp(db).listen(0,'127.0.0.1');
+  try {
+    await new Promise((resolve,reject)=>{adminAppServer.once('listening',resolve);adminAppServer.once('error',reject);});
+    const protectedResponse=await fetch(`http://127.0.0.1:${adminAppServer.address().port}/api/admin/overview`,{
+      headers:{Cookie:cookie},
+    });
+    assert.equal(protectedResponse.status,401);
+  } finally {
+    await new Promise(resolve=>adminAppServer.close(resolve));
+  }
   const blocked=await call(url,'/api/account/signup',{...regularSignup,email:exampleAdmin});
   assert.equal(blocked.status,409);
   const noAdmin=await call(url,'/api/account/login',{email:exampleAdmin,password:'wrong-password'});assert.equal(noAdmin.status,401);
