@@ -1,6 +1,6 @@
 import { useEffect,useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Globe2, Newspaper, Clock3 } from 'lucide-react';
+import { ArrowUpRight, Globe2, Newspaper, Clock3, Search } from 'lucide-react';
 import { PageIntro } from '../components/Layout';
 import SponsoredSlot from '../components/SponsoredSlot';
 import { getJson, type Article } from '../lib/api';
@@ -13,14 +13,15 @@ const sourceLinks = [
   {label:'Deutsche Welle',url:'https://www.dw.com/en/top-stories/s-9097',area:'Global perspectives'},
 ];
 export default function Newsroom(){
-  const {t}=useLang();const [category,setCategory]=useState('All');const [items,setItems]=useState<Article[]>([]);const [loading,setLoading]=useState(true);const [error,setError]=useState('');
-  useEffect(()=>{let active=true;setLoading(true);setError('');getJson<{items:Article[]}>(`/api/articles?category=${encodeURIComponent(category)}`).then(data=>{if(active)setItems(data.items);}).catch(()=>{if(active)setError('The newsroom is temporarily unavailable.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[category]);
+  const {t}=useLang();const [category,setCategory]=useState('All');const [search,setSearch]=useState('');const [items,setItems]=useState<Article[]>([]);const [loading,setLoading]=useState(true);const [error,setError]=useState('');
+  useEffect(()=>{let active=true;setLoading(true);setError('');const timer=window.setTimeout(()=>{getJson<{items:Article[]}>(`/api/articles?category=${encodeURIComponent(category)}&q=${encodeURIComponent(search)}`).then(data=>{if(active)setItems(data.items);}).catch(()=>{if(active)setError('The newsroom is temporarily unavailable.');}).finally(()=>{if(active)setLoading(false);});},250);return()=>{active=false;window.clearTimeout(timer);};},[category,search]);
   return <><PageIntro label="LOMI / EDITORIAL" title={t('newsroomHeading')} italic="& insights." description={t('newsroomText')}/>
     <section className="news-highlight"><div className="container highlight-grid"><div><span className="eyebrow light-eyebrow">PUBLISH WITH PURPOSE</span><h2>Local insight.<br/><em>Global awareness.</em></h2><p>Original news, industry insight and company announcements. Every published article is created and approved by the Lomi editorial team.</p></div><div className="globe-illustration" aria-hidden="true"><Globe2 size={174} strokeWidth={.75}/><span>LOMI / WORLD DESK</span></div></div></section>
     <section className="section-space"><div className="container"><div className="section-head"><div><span className="eyebrow"><Newspaper size={18}/> EDITORIAL</span><h2>Latest from<br/><em>our newsroom.</em></h2></div></div>
+    <div className="news-search"><Search size={19} aria-hidden="true"/><label className="sr-only" htmlFor="lomi-news-search">Search newsroom stories</label><input id="lomi-news-search" type="search" value={search} onChange={event=>setSearch(event.target.value)} maxLength={80} placeholder="Search headlines and summaries..." autoComplete="off"/></div>
     <div className="category-bar" role="group" aria-label="Filter newsroom stories">{categories.map(c=><button key={c} type="button" className={c===category?'chip active':'chip'} onClick={()=>setCategory(c)}>{c}</button>)}</div>
     {loading && <p className="state-note" role="status">Loading published stories…</p>}{error && <p role="alert" className="state-note">{error}</p>}
-    {!loading&&!error&&items.length===0 && <div className="news-empty"><Newspaper size={40}/><h3>Stories are coming soon.</h3><p>No {category==='All'?'published':category} articles yet. Authorized editors can publish original stories through the admin dashboard.</p></div>}
+    {!loading&&!error&&items.length===0 && <div className="news-empty"><Newspaper size={40}/><h3>Stories are coming soon.</h3><p>{search?'No matching published stories found. Try another search.':`No ${category==='All'?'published':category} articles yet. Authorized editors can publish original stories through the admin dashboard.`}</p></div>}
     <div className="story-grid">{items.map(item=><Link className="story-card" key={item.id} to={`/news/${item.slug}`}><span className="story-category">{item.category} · {item.language.toUpperCase()}</span><h3>{item.title}</h3><p>{item.excerpt}</p><div className="story-footer"><span><Clock3 size={14}/>{new Date(item.created_at.replace(' ','T')+'Z').toLocaleDateString()}</span><ArrowUpRight size={21}/></div></Link>)}</div>
     </div></section>
     <div className="container"><SponsoredSlot placement="news"/></div>
