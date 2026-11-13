@@ -77,7 +77,15 @@ export function createApp(db) {
   app.post('/api/admin/logout',adminWrite,(req,res)=>{endSession(db,req,res);res.json({ok:true});});
   app.get('/api/admin/overview',adminRead,(_req,res)=>{
     const count = (table) => db.prepare(`SELECT COUNT(*) AS total FROM ${table}`).get().total;
-    res.json({inquiries:count('inquiries'),ad_requests:count('ad_requests'),articles:count('articles'),campaigns:count('campaigns'),portfolio:count('portfolio_items')});
+    const filteredCount=(table,field,value) => db.prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE ${field}=?`).get(value).total;
+    res.json({
+      inquiries:count('inquiries'),ad_requests:count('ad_requests'),
+      articles:count('articles'),published_articles:filteredCount('articles','status','published'),
+      draft_articles:filteredCount('articles','status','draft'),
+      campaigns:count('campaigns'),active_campaigns:filteredCount('campaigns','status','active'),
+      portfolio_projects:count('portfolio_items'),published_projects:filteredCount('portfolio_items','status','published'),
+      registered_users:count('member_users'),
+    });
   });
   app.get('/api/admin/inquiries',adminRead,(_req,res)=>res.json({items:db.prepare('SELECT * FROM inquiries ORDER BY id DESC LIMIT 100').all()}));
   app.get('/api/admin/ad-requests',adminRead,(_req,res)=>res.json({items:db.prepare('SELECT * FROM ad_requests ORDER BY id DESC LIMIT 100').all()}));
